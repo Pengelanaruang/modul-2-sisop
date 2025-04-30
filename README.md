@@ -149,3 +149,106 @@ Worker 3: 3 messages
 
 Explanation:
 3 + 4 + 3 = 10, matching the number of messages sent in task a.
+
+LAPORAN
+
+Soal:
+### **a. Client Mengirimkan Pesan ke Load Balancer**
+
+Pipip ingin agar proses `client.c` dapat mengirimkan pesan ke `loadbalancer.c` menggunakan IPC dengan metode **shared memory**. Proses pengiriman pesan dilakukan dengan format input dari pengguna sebagai berikut:
+
+```
+Halo A;10
+```
+
+**Penjelasan:**
+
+- `"Halo A"` adalah isi pesan yang akan dikirim.
+- `10` adalah jumlah pesan yang ingin dikirim, dalam hal ini sebanyak 10 kali pesan yang sama.
+
+Selain itu, setiap kali pesan dikirim, proses `client.c` harus menuliskan aktivitasnya ke dalam **`sistem.log`** dengan format:
+
+```
+Message from client: <isi pesan>
+Message count: <jumlah pesan>
+```
+
+Semua pesan yang dikirimkan dari client akan diteruskan ke `loadbalancer.c` untuk diproses lebih lanjut.
+
+client.c :
+,,,
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+
+#define SHM_KEY 1234       
+#define MAX_MESSAGE 256    
+
+typedef struct {
+    char message[MAX_MESSAGE];
+    int count;
+} SharedData;
+
+int main() {
+
+    int shmid = shmget(SHM_KEY, sizeof(SharedData), IPC_CREAT | 0666);
+    if (shmid == -1) 
+    {
+        perror("shmget failed");
+        exit(EXIT_FAILURE);
+    }
+
+    SharedData *data = (SharedData *) shmat(shmid, NULL, 0);
+
+    if (data == (void *) -1) 
+    {
+        perror("shmat failed");
+        exit(EXIT_FAILURE);
+    }
+
+    char input[300];
+ 
+    printf("Masukkan pesan dan jumlah pesan (format: pesan;jumlah):\n");
+    fgets(input, sizeof(input), stdin);
+
+    input[strcspn(input, "\n")] = 0;
+
+    char *token = strtok(input, ";");
+   
+    if (token == NULL) 
+    {
+        printf("Format input salah.\n");
+        exit(EXIT_FAILURE);
+    }
+    strcpy(data->message, token);
+
+    token = strtok(NULL, ";");
+
+    if (token == NULL) 
+    {
+        printf("Format input salah.\n");
+        exit(EXIT_FAILURE);
+    }
+    data->count = atoi(token);
+
+    FILE *logfile = fopen("sistem.log", "a");
+
+    if (logfile == NULL) 
+    {
+        perror("Gagal membuka sistem.log");
+        exit(EXIT_FAILURE);
+    }
+
+    fprintf(logfile, "Message from client: %s\n", data->message);
+    fprintf(logfile, "Message count: %d\n", data->count);
+    fclose(logfile);
+
+    printf("Pesan berhasil dikirim ke shared memory.\n");
+
+    shmdt(data);
+
+    return 0;
+}
+...
